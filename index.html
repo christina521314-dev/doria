@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>抓蕉猴 - 游戏Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .game-container {
+            background: #2c3e50;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 1200px;
+            width: 95%;
+        }
+
+        .game-header {
+            text-align: center;
+            color: #fff;
+            margin-bottom: 20px;
+        }
+
+        .game-header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .game-info {
+            display: flex;
+            justify-content: space-between;
+            color: #fff;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .game-canvas-wrapper {
+            position: relative;
+            background: #87CEEB;
+            border: 4px solid #34495e;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3);
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 500px;
+        }
+
+        .controls {
+            margin-top: 20px;
+            text-align: center;
+            color: #fff;
+        }
+
+        .controls h3 {
+            margin-bottom: 10px;
+        }
+
+        .control-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #3498db;
+            color: white;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+
+        .btn:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .game-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: white;
+            font-size: 2em;
+            z-index: 100;
+            border-radius: 10px;
+        }
+
+        .game-overlay.show {
+            display: flex;
+        }
+
+        .overlay-message {
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .victory {
+            color: #f1c40f;
+        }
+
+        .defeat {
+            color: #e74c3c;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="game-header">
+            <h1>🐒 抓蕉猴 🍌</h1>
+        </div>
+        <div class="game-info">
+            <div>得分: <span id="score">0</span></div>
+            <div>距离: <span id="distance">0</span>m</div>
+            <div>状态: <span id="status">游戏中</span></div>
+        </div>
+        <div class="game-canvas-wrapper">
+            <canvas id="gameCanvas"></canvas>
+            <div class="game-overlay" id="gameOverlay">
+                <div class="overlay-message" id="overlayMessage"></div>
+                <button class="btn" onclick="restartGame()">重新开始</button>
+            </div>
+        </div>
+        <div class="controls">
+            <h3>操作说明</h3>
+            <p>← → 方向键移动 | 空格键跳跃</p>
+            <div class="control-buttons">
+                <button class="btn" onclick="startGame()">开始游戏</button>
+                <button class="btn" onclick="pauseGame()">暂停</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameOverlay = document.getElementById('gameOverlay');
+        const overlayMessage = document.getElementById('overlayMessage');
+        const scoreElement = document.getElementById('score');
+        const distanceElement = document.getElementById('distance');
+        const statusElement = document.getElementById('status');
+
+        // 固定游戏逻辑尺寸
+        const GAME_WIDTH = 1280;
+        const GAME_HEIGHT = 720;
+
+        // 设置画布尺寸（固定为游戏逻辑尺寸）
+        function resizeCanvas() {
+            canvas.width = GAME_WIDTH;
+            canvas.height = GAME_HEIGHT;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // 相机系统（用于画面滚动和视差效果）
+        const camera = {
+            x: 0,
+            y: 0,
+            targetX: 0,
+            followSpeed: 0.1
+        };
+
+        // 背景图片对象
+        const backgroundImages = {
+            far: null,    // 远景 bg_d
+            mid: null,    // 中景 bg_m
+            near: null    // 近景 bg_c
+        };
+
+        // 视差滚动速度系数（相对于相机移动速度）
+        const PARALLAX_SPEED = {
+            far: 0.2,    // 远景最慢（移动20%）
+            mid: 0.5,    // 中景中等（移动50%）
+            near: 0.8    // 近景最快（移动80%）
+        };
+
+        // 背景图片对齐偏移配置（用于调整天空和道路位置）
+        // 地面位置：GAME_HEIGHT - 100 = 620（在绘制函数中定义）
+        // 调整说明：
+        //   - offsetX: X轴偏移，正数向右移动，负数向左移动
+        //   - offsetY: Y轴偏移，正数向下移动，负数向上移动
+        //   - 近景道路要对齐到地面(620)，如果图片高度720，则offsetY约-100（图片底部对齐地面）
+        //   - 可以根据实际图片尺寸和对齐需求调整这些值
+        const BACKGROUND_OFFSET = {
+            far: { x: 0, y: 0 },    // 远景偏移（第220行配置）- 调整X/Y坐标
+            mid: { x: 0, y: 0 },    // 中景偏移（第221行配置）- 调整X/Y坐标
+            near: { x: 0, y: -100 } // 近景偏移（第222行配置）- 负值向上，让道路对齐地面
+        };
+
+        // 加载背景图片
+        function loadBackgroundImages() {
+            backgroundImages.far = new Image();
+            backgroundImages.far.src = 'bg_d.png';  // 远景图片
+            
+            backgroundImages.mid = new Image();
+            backgroundImages.mid.src = 'bg_m.png';  // 中景图片
+            
+            backgroundImages.near = new Image();
+            backgroundImages.near.src = 'bg_c.png';  // 近景图片
+            
+            // 添加加载完成回调
+            let loadedCount = 0;
+            const totalImages = 3;
+            
+            function onImageLoad() {
+                loadedCount++;
+                console.log(`背景图片加载成功 (${loadedCount}/${totalImages})`);
+                if (loadedCount === totalImages) {
+                    console.log('所有背景图片加载完成');
+                }
+            }
+            
+            backgroundImages.far.onload = onImageLoad;
+            backgroundImages.mid.onload = onImageLoad;
+            backgroundImages.near.onload = onImageLoad;
+            
+            // 加载失败时的处理
+            backgroundImages.far.onerror = (e) => {
+                console.error('远景图片(bg_d.png)加载失败:', e);
+                console.error('请确认文件是否存在且路径正确');
+            };
+            backgroundImages.mid.onerror = (e) => {
+                console.error('中景图片(bg_m.png)加载失败:', e);
+                console.error('请确认文件是否存在且路径正确');
+            };
+            backgroundImages.near.onerror = (e) => {
+                console.error('近景图片(bg_c.png)加载失败:', e);
+                console.error('请确认文件是否存在且路径正确');
+            };
+        }
+
+        // 初始化时加载背景图片
+        loadBackgroundImages();
+
+        // 游戏状态
+        let gameState = {
+            running: false,
+            paused: false,
+            gameOver: false,
+            victory: false,
+            score: 0,
+            distance: 0
+        };
+
+        // 玩家对象
+        const player = {
+            x: 100,
+            y: 300,
+            width: 40,
+            height: 60,
+            speedX: 0,
+            speedY: 0,
+            onGround: false,
+            jumpPower: -15,
+            gravity: 0.8,
+            maxSpeed: 8,
+            color: '#3498db'
+        };
+
+        // 目标猴子对象
+        const targetMonkey = {
+            x: 800,
+            y: 300,
+            width: 50,
+            height: 60,
+            speedX: -2,
+            color: '#f39c12',
+            hasBanana: true
+        };
+
+        // 陷阱数组
+        const traps = [];
+        const trapWidth = 80;
+        const trapHeight = 20;
+
+        // 初始化陷阱
+        function initTraps() {
+            traps.length = 0;
+            for (let i = 0; i < 5; i++) {
+                traps.push({
+                    x: 300 + i * 200,
+                    y: GAME_HEIGHT - 50,
+                    width: trapWidth,
+                    height: trapHeight,
+                    color: '#e74c3c'
+                });
+            }
+        }
+
+        // 键盘控制
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (player.onGround && gameState.running && !gameState.paused) {
+                    player.speedY = player.jumpPower;
+                    player.onGround = false;
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        // 碰撞检测
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        // 检查玩家是否掉入陷阱
+        function checkTrapCollision() {
+            for (let trap of traps) {
+                if (checkCollision(player, trap)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // 检查是否追上猴子
+        function checkVictory() {
+            const distance = Math.abs(player.x - targetMonkey.x);
+            return distance < 30 && Math.abs(player.y - targetMonkey.y) < 40;
+        }
+
+        // 更新游戏逻辑
+        function update() {
+            if (!gameState.running || gameState.paused || gameState.gameOver) {
+                return;
+            }
+
+            // 玩家移动
+            if (keys['ArrowLeft'] || keys['KeyA']) {
+                player.speedX = -player.maxSpeed;
+            } else if (keys['ArrowRight'] || keys['KeyD']) {
+                player.speedX = player.maxSpeed;
+            } else {
+                player.speedX *= 0.8; // 摩擦力
+            }
+
+            // 重力
+            player.speedY += player.gravity;
+            player.y += player.speedY;
+
+            // 地面碰撞
+            const groundY = GAME_HEIGHT - 100;
+            if (player.y + player.height >= groundY) {
+                player.y = groundY - player.height;
+                player.speedY = 0;
+                player.onGround = true;
+            } else {
+                player.onGround = false;
+            }
+
+            // 更新玩家位置
+            player.x += player.speedX;
+
+            // 边界限制（允许玩家超出屏幕右侧，用于滚动）
+            if (player.x < 0) player.x = 0;
+
+            // 相机跟随玩家（当玩家超过屏幕中心时）
+            const screenCenterX = GAME_WIDTH / 2;
+            if (player.x > screenCenterX) {
+                camera.targetX = player.x - screenCenterX;
+            } else {
+                camera.targetX = 0;
+            }
+            // 平滑跟随
+            camera.x += (camera.targetX - camera.x) * camera.followSpeed;
+
+            // 更新目标猴子位置
+            targetMonkey.y = groundY - targetMonkey.height;
+            targetMonkey.x += targetMonkey.speedX;
+            // 猴子可以超出屏幕，让相机跟随处理
+            if (targetMonkey.x + targetMonkey.width < camera.x) {
+                targetMonkey.x = camera.x + GAME_WIDTH + 100;
+            }
+
+            // 检查碰撞
+            if (checkTrapCollision()) {
+                gameState.gameOver = true;
+                gameState.running = false;
+                showGameOver(false);
+            }
+
+            // 检查胜利
+            if (checkVictory()) {
+                gameState.victory = true;
+                gameState.gameOver = true;
+                gameState.running = false;
+                gameState.score += 1000;
+                showGameOver(true);
+            }
+
+            // 更新分数和距离
+            gameState.distance = Math.floor((player.x - 100) / 10);
+            if (player.onGround && player.speedX !== 0) {
+                gameState.score += 1;
+            }
+            updateUI();
+        }
+
+        // 绘制游戏
+        function draw() {
+            // 保存上下文状态（不应用相机偏移绘制背景）
+            ctx.save();
+            
+            // 绘制远景（最慢，在最底层）
+            if (backgroundImages.far && backgroundImages.far.complete && backgroundImages.far.naturalWidth > 0) {
+                const imgWidth = backgroundImages.far.naturalWidth || GAME_WIDTH;
+                const imgHeight = backgroundImages.far.naturalHeight || GAME_HEIGHT;
+                const farOffsetX = camera.x * PARALLAX_SPEED.far;
+                const farX = -(farOffsetX % imgWidth) + BACKGROUND_OFFSET.far.x;
+                const farY = BACKGROUND_OFFSET.far.y;
+                
+                // 绘制远景图片（无缝循环，确保覆盖整个画布）
+                let drawX = farX;
+                while (drawX < GAME_WIDTH) {
+                    ctx.drawImage(
+                        backgroundImages.far,
+                        drawX, farY,
+                        imgWidth, imgHeight
+                    );
+                    drawX += imgWidth;
+                }
+            } else {
+                // 如果图片未加载，使用原有的天空色
+                ctx.fillStyle = '#87CEEB';
+                ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            }
+            
+            // 绘制中景（中等速度，在中间层）
+            if (backgroundImages.mid && backgroundImages.mid.complete && backgroundImages.mid.naturalWidth > 0) {
+                ctx.save();
+                ctx.globalAlpha = 0.95; // 稍微透明，让远景可见
+                const imgWidth = backgroundImages.mid.naturalWidth || GAME_WIDTH;
+                const imgHeight = backgroundImages.mid.naturalHeight || GAME_HEIGHT;
+                const midOffsetX = camera.x * PARALLAX_SPEED.mid;
+                const midX = -(midOffsetX % imgWidth) + BACKGROUND_OFFSET.mid.x;
+                const midY = BACKGROUND_OFFSET.mid.y;
+                
+                // 绘制中景图片（无缝循环）
+                let drawX = midX;
+                while (drawX < GAME_WIDTH) {
+                    ctx.drawImage(
+                        backgroundImages.mid,
+                        drawX, midY,
+                        imgWidth, imgHeight
+                    );
+                    drawX += imgWidth;
+                }
+                ctx.restore();
+            }
+            
+            // 绘制近景（最快速度，在最上层，但在地面以下）
+            if (backgroundImages.near && backgroundImages.near.complete && backgroundImages.near.width > 0) {
+                ctx.save();
+                ctx.globalAlpha = 0.98;
+                const nearOffsetX = camera.x * PARALLAX_SPEED.near;
+                const nearX = -(nearOffsetX % (backgroundImages.near.width || GAME_WIDTH)) + BACKGROUND_OFFSET.near.x;
+                const nearY = BACKGROUND_OFFSET.near.y;
+                
+                // 绘制近景图片
+                ctx.drawImage(
+                    backgroundImages.near,
+                    nearX, nearY,
+                    backgroundImages.near.width || GAME_WIDTH,
+                    backgroundImages.near.height || GAME_HEIGHT
+                );
+                // 无缝循环
+                if (nearX + (backgroundImages.near.width || GAME_WIDTH) < GAME_WIDTH) {
+                    ctx.drawImage(
+                        backgroundImages.near,
+                        nearX + (backgroundImages.near.width || GAME_WIDTH), nearY,
+                        backgroundImages.near.width || GAME_WIDTH,
+                        backgroundImages.near.height || GAME_HEIGHT
+                    );
+                }
+                ctx.restore();
+            }
+
+            ctx.restore();
+
+            // 应用相机偏移（之后的游戏对象会跟随相机）
+            ctx.translate(-camera.x, 0);
+
+            // 绘制地面（在近景之后，但在游戏对象之前）
+            const groundY = GAME_HEIGHT - 100;
+            const groundStartX = Math.floor(camera.x / 100) * 100 - 100;
+            const groundEndX = camera.x + GAME_WIDTH + 100;
+            
+            ctx.fillStyle = '#27ae60';
+            ctx.fillRect(groundStartX, groundY, groundEndX - groundStartX, GAME_HEIGHT - groundY);
+
+            // 绘制草地纹理
+            ctx.fillStyle = '#2ecc71';
+            for (let i = groundStartX; i < groundEndX; i += 20) {
+                ctx.fillRect(i, groundY, 10, 5);
+            }
+
+            // 绘制陷阱
+            ctx.fillStyle = '#e74c3c';
+            for (let trap of traps) {
+                ctx.fillRect(trap.x, trap.y, trap.width, trap.height);
+                // 陷阱边缘
+                ctx.strokeStyle = '#c0392b';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(trap.x, trap.y, trap.width, trap.height);
+            }
+
+            // 绘制目标猴子
+            ctx.fillStyle = targetMonkey.color;
+            ctx.fillRect(targetMonkey.x, targetMonkey.y, targetMonkey.width, targetMonkey.height);
+            
+            // 猴子眼睛
+            ctx.fillStyle = '#000';
+            ctx.fillRect(targetMonkey.x + 10, targetMonkey.y + 15, 8, 8);
+            ctx.fillRect(targetMonkey.x + 32, targetMonkey.y + 15, 8, 8);
+            
+            // 香蕉
+            if (targetMonkey.hasBanana) {
+                ctx.fillStyle = '#f1c40f';
+                ctx.beginPath();
+                ctx.arc(targetMonkey.x + 25, targetMonkey.y - 10, 12, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#d4ac0d';
+                ctx.beginPath();
+                ctx.arc(targetMonkey.x + 25, targetMonkey.y - 10, 8, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // 绘制玩家
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // 玩家眼睛
+            ctx.fillStyle = '#000';
+            ctx.fillRect(player.x + 10, player.y + 15, 6, 6);
+            ctx.fillRect(player.x + 24, player.y + 15, 6, 6);
+            
+            // 玩家手臂（跳跃时）
+            if (!player.onGround) {
+                ctx.fillStyle = player.color;
+                ctx.fillRect(player.x - 5, player.y + 20, 8, 15);
+                ctx.fillRect(player.x + player.width - 3, player.y + 20, 8, 15);
+            }
+        }
+
+        // 游戏循环
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 显示游戏结束界面
+        function showGameOver(victory) {
+            gameOverlay.classList.add('show');
+            if (victory) {
+                overlayMessage.textContent = '🎉 恭喜！你抓住了猴子！🎉';
+                overlayMessage.className = 'overlay-message victory';
+                statusElement.textContent = '胜利';
+            } else {
+                overlayMessage.textContent = '💀 游戏结束！掉入陷阱了！💀';
+                overlayMessage.className = 'overlay-message defeat';
+                statusElement.textContent = '失败';
+            }
+        }
+
+        // 更新UI
+        function updateUI() {
+            scoreElement.textContent = gameState.score;
+            distanceElement.textContent = gameState.distance;
+        }
+
+        // 开始游戏
+        function startGame() {
+            gameState.running = true;
+            gameState.paused = false;
+            gameState.gameOver = false;
+            gameState.victory = false;
+            gameState.score = 0;
+            gameState.distance = 0;
+            
+            // 重置玩家位置
+            player.x = 100;
+            player.y = 300;
+            player.speedX = 0;
+            player.speedY = 0;
+            
+            // 重置猴子位置
+            targetMonkey.x = 800;
+            targetMonkey.y = 300;
+            
+            // 初始化陷阱
+            initTraps();
+            
+            gameOverlay.classList.remove('show');
+            statusElement.textContent = '游戏中';
+            updateUI();
+        }
+
+        // 暂停游戏
+        function pauseGame() {
+            if (gameState.running && !gameState.gameOver) {
+                gameState.paused = !gameState.paused;
+                statusElement.textContent = gameState.paused ? '已暂停' : '游戏中';
+            }
+        }
+
+        // 重新开始游戏
+        function restartGame() {
+            startGame();
+        }
+
+        // 启动游戏循环
+        gameLoop();
+
+        // 初始化
+        initTraps();
+    </script>
+</body>
+</html>
