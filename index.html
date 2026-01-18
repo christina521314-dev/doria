@@ -872,8 +872,10 @@
         // 触摸追踪
         let activeTouches = {};
 
-        // 计算玩家初始Y位置
-        const PLAYER_INITIAL_Y = GAME_HEIGHT - PLAYER_CONFIG.initialYOffset;
+        // 计算玩家初始Y位置（确保角色站在地面上）
+        // 计算方式：GROUND_Y - player.height，这样角色底部正好贴地
+        // 转换为offset：GAME_HEIGHT - (GROUND_Y - player.height)
+        const PLAYER_INITIAL_Y = GROUND_Y - PLAYER_CONFIG.height;
 
         // 玩家对象（使用配置）
         const player = {
@@ -3353,7 +3355,7 @@
             const newStartX = levelSettings.startDistance * 10; // 转换为像素
             
             player.x = newStartX + 100;
-            player.y = GAME_HEIGHT - 200;
+            player.y = GROUND_Y - PLAYER_CONFIG.height; // 确保站在地面上，与猴子同一水平线
             // 重置动画位置
             player.animX = { current: player.x, velocity: 0 };
             player.animY = { current: player.y, velocity: 0 };
@@ -3361,7 +3363,7 @@
             player.speedY = 0;
             
             targetMonkey.x = newStartX + 500;
-            targetMonkey.y = GAME_HEIGHT - 200;
+            targetMonkey.y = GROUND_Y - TARGET_MONKEY_CONFIG.height; // 确保站在地面上，与hero同一水平线
             targetMonkey.speedX = 5;  // 从4增加到5，基础速度更快
             targetMonkey.speedY = 0;
             targetMonkey.onGround = true;
@@ -3516,7 +3518,7 @@
             
             // 重置玩家位置（在猴子后面）
             player.x = startX + 100;
-            player.y = GAME_HEIGHT - 200;
+            player.y = GROUND_Y - PLAYER_CONFIG.height; // 确保站在地面上，与猴子同一水平线
             // 重置动画位置
             player.animX = { current: player.x, velocity: 0 };
             player.animY = { current: player.y, velocity: 0 };
@@ -3525,7 +3527,7 @@
             
             // 重置猴子位置（在玩家前面）
             targetMonkey.x = startX + 500;
-            targetMonkey.y = GAME_HEIGHT - 200;
+            targetMonkey.y = GROUND_Y - TARGET_MONKEY_CONFIG.height; // 确保站在地面上，与hero同一水平线
             targetMonkey.speedX = 5;  // 从4增加到5，基础速度更快
             targetMonkey.speedY = 0;
             targetMonkey.onGround = true;

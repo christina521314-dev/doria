@@ -9,10 +9,12 @@ const GAME_CONFIG = {
 
 // ========== 角色配置 ==========
 const PLAYER_CONFIG = {
-    width: 200,           // 角色宽度（像素）
-    height: 240,          // 角色高度（像素）
+    width: 150,           // 角色宽度（像素）
+    height: 200,          // 角色高度（像素）
     initialX: 100,       // 初始X位置
-    initialYOffset: 0  // 初始Y位置偏移（从画布底部向上，GAME_HEIGHT - initialYOffset）
+    initialYOffset: 300  // 初始Y位置偏移（从画布底部向上，GAME_HEIGHT - initialYOffset）
+    // 计算方式：GAME_HEIGHT - (GROUND_Y - height) = 720 - (620 - 240) = 720 - 380 = 340
+    // 这样角色一开始就站在地面上，而不是在空中
 };
 
 // ========== 地面配置 ==========
@@ -27,9 +29,9 @@ const GROUND_CONFIG = {
 
 // ========== 平台/陷阱配置 ==========
 const PLATFORM_CONFIG = {
-    trapWidth: 50,   // 陷阱宽度（像素）
-    trapHeight: 100,  // 陷阱高度（像素）
-    collisionBoxWidth: 60,  // 碰撞盒宽度（像素，小于实际宽度，让碰撞更精确）- 从80缩小到60
+    trapWidth: 80,   // 陷阱宽度（像素）
+    trapHeight: 50,  // 陷阱高度（像素）
+    collisionBoxWidth: 10,  // 碰撞盒宽度（像素，小于实际宽度，让碰撞更精确）- 从80缩小到60
     minDistanceFromTree: 400  // 与香蕉树的最小距离（像素）
 };
 
@@ -91,7 +93,7 @@ const TARGET_MONKEY_CONFIG = {
     width: 150,          // 目标猴子宽度（像素）
     height: 240,         // 目标猴子高度（像素）
     initialX: 500,      // 初始X位置
-    initialYOffset: 200, // 初始Y位置偏移（与玩家相同）
+    initialYOffset: 340, // 初始Y位置偏移（与玩家相同，确保在同一水平线）
     baseSpeed: 4,       // 基础移动速度
     jumpPower: -15,     // 跳跃力度
     gravity: 0.8,       // 重力
