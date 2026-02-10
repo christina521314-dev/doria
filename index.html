@@ -243,7 +243,7 @@
         
         // ========== 游戏配置参数（可手动调整） ==========
         // 陷阱相邻最小距离（像素）- 增大此值可以让陷阱之间距离更远
-        const TRAP_MIN_DISTANCE = 250; // 从200增加到250，让间距更大
+        const TRAP_MIN_DISTANCE = 450; // 从200增加到250，让间距更大
         // 陷阱位置随机偏移范围（像素）- 增大此值可以让陷阱位置更随机，避免过于平均
         const TRAP_RANDOM_OFFSET = 400; // 默认400像素，可根据需要调整（0表示不随机）
         // 陷阱间距随机倍数范围 - [min, max]，值越大间距越随机
@@ -304,6 +304,10 @@
         // 陷阱图片对象
         const trapImg = new Image();
         trapImg.src = 'trap.png?v=' + Date.now();
+
+        // 背景音乐
+        const bgMusic = new Audio('偷香蕉的猴子.mp3');
+        bgMusic.loop = true;  // 从头到尾循环播放
 
         // 确保图片加载完再渲染，防止"游戏不动"
         let assetsLoaded = 0;
@@ -419,8 +423,8 @@
                 firstBananaTree: false,    // 是否已显示第一次遇到香蕉树的引导
                 preGameInstructionsShown: false  // 是否已显示游戏开始前的说明
             },
-            bananaNotificationTimer: 0,    // 香蕉提示显示计时器
-            bananaNotificationShown: false, // 是否已显示香蕉提示
+            levelNotificationTimer: 0,     // 关卡提示显示计时器
+            levelNotificationShown: false, // 是否已显示关卡提示
             speedMultiplier: 1.0,          // 速度倍数（初始为1.0）
             baseMaxSpeed: 8,               // 玩家基础最大速度（存储原始值）
             baseMonkeySpeed: 5,            // 猴子基础速度（存储原始值）
@@ -435,8 +439,21 @@
                 opacity: 0,                // 透明度（用于淡入淡出）
                 floatOffset: 0,            // 浮动偏移量
                 isWaiting: false           // 是否在等待状态
-            }
+            },
+            musicOn: (function() {
+                try {
+                    const saved = localStorage.getItem('doria_musicOn');
+                    return saved !== null ? saved === 'true' : true;
+                } catch (e) { return true; }
+            })()                  // 背景音乐开关（从本地存储恢复，默认开启）
         };
+
+        // 保存设置到本地
+        function saveSettings() {
+            try {
+                localStorage.setItem('doria_musicOn', String(gameState.musicOn));
+            } catch (e) { /* 忽略存储异常 */ }
+        }
 
         // 从配置中更新 waitDuration（避免初始化顺序问题）
         gameState.monkeyTaunt.waitDuration = MONKEY_TAUNT_CONFIG.waitDuration;
@@ -451,7 +468,7 @@
         // 香蕉系统设置
         const BANANA_SETTINGS = {
             initialBananas: 0,             // 初始香蕉数量（改为0，由关卡发放）
-            workTime: 3.0,                 // 干活时间（秒）- 缩短到3.0秒
+            workTime: 1.0,                 // 干活时间（秒）- 缩短到3.0秒
             workReward: 2,                 // 干活获得的香蕉 - 从3降低到2，增加难度
             skipCost: 4,                   // 跳过消耗的香蕉 - 从3增加到4，提高成本
             minBananas: 0,                 // 最少香蕉数量（不能为负）
@@ -515,7 +532,7 @@
                     trapSpacing: 600,           // 从400增加到600，间距更大
                     trapProbability: 0.35,       // 从0.4降低到0.35
                     treeSpacing: 500,           // 从450增加到500
-                    treeProbability: 0.75,       // 从0.7提高到0.75
+                    treeProbability: 0.95,       // 从0.7提高到0.75
                     monkeySpacing: 800,         // 从600增加到800，普通猴子更少
                     monkeyProbability: 0.25,     // 从0.3降低到0.25
                     bananaReward: 5,            // 从4增加到5
@@ -527,7 +544,7 @@
                     startDistance: 1000,
                     endDistance: 1500,
                     trapSpacing: 350,           // 从280增加到350
-                    trapProbability: 0.55,       // 从0.6降低到0.55
+                    trapProbability: 0.85,       // 从0.6降低到0.55
                     treeSpacing: 420,           // 从350增加到420
                     treeProbability: 0.8,       // 从0.75提高到0.8
                     monkeySpacing: 500,         // 从400增加到500
@@ -541,7 +558,7 @@
                     startDistance: 1500,
                     endDistance: 2000,
                     trapSpacing: 280,           // 从220增加到280
-                    trapProbability: 0.6,       // 从0.65降低到0.6
+                    trapProbability: 0.75,       // 从0.65降低到0.6
                     treeSpacing: 380,           // 从320增加到380
                     treeProbability: 0.85,      // 从0.8提高到0.85
                     monkeySpacing: 400,         // 从350增加到400
@@ -857,7 +874,8 @@
             right: false,
             jump: false,
             work: false,  // 干活按钮
-            skip: false   // 跳过按钮
+            skip: false,  // 跳过按钮
+            sound: false  // 声音按钮
         };
 
         // 虚拟按键位置（在canvas坐标系中）- 优化布局，避免重叠
@@ -866,7 +884,8 @@
             jump: { x: 50, y: GAME_HEIGHT - 90, width: 100, height: 80 },                       // 左侧，跳跃按钮
             work: { x: GAME_WIDTH - 370, y: GAME_HEIGHT - 90, width: 100, height: 80 },        // 干活按钮，紧挨跳过按钮
             skip: { x: GAME_WIDTH - 260, y: GAME_HEIGHT - 90, width: 100, height: 80 },        // 跳过按钮，紧挨前进按钮
-            right: { x: GAME_WIDTH - 150, y: GAME_HEIGHT - 90, width: 100, height: 80 }        // 右侧，前进按钮
+            right: { x: GAME_WIDTH - 150, y: GAME_HEIGHT - 90, width: 100, height: 80 },        // 右侧，前进按钮
+            sound: { x: 25, y: 25, width: 55, height: 45 }                                     // 左上角，声音按钮
         };
 
         // 触摸追踪
@@ -1482,10 +1501,28 @@
             }
         }
 
-        // 检查玩家是否碰到普通猴子
+        // 检查玩家是否碰到普通猴子（与陷阱碰撞逻辑一致）
         function checkNormalMonkeyCollision() {
+            const playerBottom = player.y + player.height;
+            const playerTop = player.y;
+            const playerLeft = player.x;
+            const playerRight = player.x + player.width;
+
+            const collisionBoxWidth = NORMAL_MONKEY_CONFIG.collisionBoxWidth != null
+                ? NORMAL_MONKEY_CONFIG.collisionBoxWidth
+                : NORMAL_MONKEY_CONFIG.width;
+            const collisionBoxOffset = (NORMAL_MONKEY_CONFIG.width - collisionBoxWidth) / 2;
+
             for (let monkey of normalMonkeys) {
-                if (checkCollision(player, monkey)) {
+                const monkeyTop = monkey.y;
+                const monkeyBottom = monkey.y + monkey.height;
+                const monkeyLeft = monkey.x + collisionBoxOffset;
+                const monkeyRight = monkey.x + collisionBoxOffset + collisionBoxWidth;
+
+                const horizontalOverlap = playerRight - 80 > monkeyLeft && playerLeft + 20 < monkeyRight;
+                const verticalOverlap = playerBottom >= monkeyTop && playerTop <= monkeyBottom;
+
+                if (horizontalOverlap && verticalOverlap) {
                     return true;
                 }
             }
@@ -1539,6 +1576,13 @@
         function checkVirtualButtonTouch(x, y, scaleX, scaleY) {
             const canvasX = x * scaleX;
             const canvasY = y * scaleY;
+
+            // 检查声音按钮（左上角，始终可点击）
+            const soundBtn = virtualButtonPositions.sound;
+            if (canvasX >= soundBtn.x && canvasX <= soundBtn.x + soundBtn.width &&
+                canvasY >= soundBtn.y && canvasY <= soundBtn.y + soundBtn.height) {
+                return 'sound';
+            }
 
             // 检查跳跃按钮（左侧）
             const jumpBtn = virtualButtonPositions.jump;
@@ -1600,15 +1644,29 @@
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
             const coords = getCanvasCoordinates(e);
+            const touch = e.touches[0];
+            const touchX = touch.clientX - canvas.getBoundingClientRect().left;
+            const touchY = touch.clientY - canvas.getBoundingClientRect().top;
+            const canvasX = touchX * coords.scaleX;
+            const canvasY = touchY * coords.scaleY;
+            
+            // 优先检查声音按钮（始终可点击）
+            const soundBtn = virtualButtonPositions.sound;
+            if (canvasX >= soundBtn.x && canvasX <= soundBtn.x + soundBtn.width &&
+                canvasY >= soundBtn.y && canvasY <= soundBtn.y + soundBtn.height) {
+                gameState.musicOn = !gameState.musicOn;
+                saveSettings();
+                if (gameState.musicOn) {
+                    bgMusic.play().catch(err => console.log('音乐播放失败:', err));
+                } else {
+                    bgMusic.pause();
+                }
+                return;
+            }
             
             // 检查是否点击了重新开始按钮（移动设备）
             if (!gameState.running || gameState.gameOver || gameState.levelComplete) {
-                const touch = e.touches[0];
-                const touchX = touch.clientX - canvas.getBoundingClientRect().left;
-                const touchY = touch.clientY - canvas.getBoundingClientRect().top;
-                const canvasX = touchX * coords.scaleX;
-                const canvasY = touchY * coords.scaleY;
-                
+                // touchX, touchY, canvasX, canvasY 已在上面定义
                 // 检查是否点击了说明界面的开始按钮
                 if (gameState.currentLevel === 0 && !gameState.tutorialShown.preGameInstructionsShown && !gameState.gameOver) {
                     const boxWidth = 450;
@@ -1649,6 +1707,8 @@
                 // 检查虚拟按键
                 const button = checkVirtualButtonTouch(touchX, touchY, coords.scaleX, coords.scaleY);
                 if (button) {
+                    // 声音按钮已在 touchstart 开头处理
+                    if (button === 'sound') return;
                     activeTouches[touch.identifier] = button;
                     virtualButtons[button] = true;
                     
@@ -1720,13 +1780,16 @@
             mouseX = (e.clientX - rect.left) * scaleX;
             mouseY = (e.clientY - rect.top) * scaleY;
 
-            // 检查鼠标是否在按钮区域
+            // 检查鼠标是否在按钮区域（开始/重新开始按钮 或 声音按钮）
             const btnX = GAME_WIDTH / 2 - 100;
             const btnY = GAME_HEIGHT / 2 + 50;
             const btnWidth = 200;
             const btnHeight = 50;
+            const soundBtn = virtualButtonPositions.sound;
+            const isSoundBtnHovered = mouseX >= soundBtn.x && mouseX <= soundBtn.x + soundBtn.width &&
+                                    mouseY >= soundBtn.y && mouseY <= soundBtn.y + soundBtn.height;
 
-            isButtonHovered = (mouseX >= btnX && mouseX <= btnX + btnWidth && 
+            isButtonHovered = isSoundBtnHovered || (mouseX >= btnX && mouseX <= btnX + btnWidth && 
                               mouseY >= btnY && mouseY <= btnY + btnHeight &&
                               (!gameState.running || gameState.gameOver));
             
@@ -1743,6 +1806,20 @@
             const scaleY = canvas.height / rect.height;
             const x = (e.clientX - rect.left) * scaleX;
             const y = (e.clientY - rect.top) * scaleY;
+
+            // 检查声音按钮（始终可点击）
+            const soundBtn = virtualButtonPositions.sound;
+            if (x >= soundBtn.x && x <= soundBtn.x + soundBtn.width &&
+                y >= soundBtn.y && y <= soundBtn.y + soundBtn.height) {
+                gameState.musicOn = !gameState.musicOn;
+                saveSettings();
+                if (gameState.musicOn) {
+                    bgMusic.play().catch(err => console.log('音乐播放失败:', err));
+                } else {
+                    bgMusic.pause();
+                }
+                return;
+            }
 
             // 如果游戏结束或未开始，点击按钮区域可以重新开始
             if ((!gameState.running || gameState.gameOver || gameState.levelComplete)) {
@@ -1802,7 +1879,7 @@
                 const trapRight = trap.x + collisionBoxOffset + collisionBoxWidth;
                 
                 // 检查玩家是否在陷阱的X范围内
-                const horizontalOverlap = playerRight > trapLeft && playerLeft < trapRight;
+                const horizontalOverlap = playerRight - 80 > trapLeft && playerLeft + 20 < trapRight;
                 
                 // 检查玩家是否接触或掉入陷阱（玩家的底部接触到陷阱的顶部或更下方）
                 const verticalOverlap = playerBottom >= trapTop && playerTop <= trapBottom;
@@ -2324,6 +2401,8 @@
                     generateBananaTrees(generateStartX, generateEndX);
                     generateNormalMonkeys(generateStartX, generateEndX);
                     
+                    gameState.levelNotificationShown = false; // 新关卡开始时显示关卡名
+                    gameState.levelNotificationTimer = 0;
                     console.log(`进入${currentLevelSettings.name}，发放${currentLevelSettings.bananaReward}个香蕉`);
                 }
             }
@@ -2333,14 +2412,12 @@
                 const currentLevelSettings = LEVEL_SETTINGS.levels[gameState.currentLevel];
                 gameState.bananas += currentLevelSettings.bananaReward;
                 gameState.levelBananasReceived = true;
-                gameState.bananaNotificationShown = false; // 显示香蕉提示
-                gameState.bananaNotificationTimer = 0; // 重置计时器
                 console.log(`获得${currentLevelSettings.bananaReward}个香蕉，当前总数：${gameState.bananas}`);
             }
             
-            // 更新香蕉提示计时器
-            if (gameState.running && !gameState.bananaNotificationShown) {
-                gameState.bananaNotificationTimer += deltaTime;
+            // 更新关卡提示计时器
+            if (gameState.running && !gameState.levelNotificationShown) {
+                gameState.levelNotificationTimer += deltaTime;
             }
 
             // 检查玩家是否接近香蕉树
@@ -2836,36 +2913,28 @@
             ctx.fillText(`🍌 ${gameState.bananas}`, bananaPanelX + bananaPanelWidth / 2, bananaPanelY + 55);
             ctx.textAlign = 'left';
             
-            // 绘制香蕉数量提示（游戏开始后2秒内显示）
-            if (gameState.running && !gameState.bananaNotificationShown && gameState.bananaNotificationTimer < 3.0) {
-                const currentLevelSettings = LEVEL_SETTINGS.levels[gameState.currentLevel];
-                const notificationX = GAME_WIDTH / 2;
-                const notificationY = GAME_HEIGHT / 2 - 100;
-                
-                // 淡入淡出效果
-                const alpha = gameState.bananaNotificationTimer < 0.5 ? gameState.bananaNotificationTimer * 2 :
-                             gameState.bananaNotificationTimer > 2.5 ? (3.0 - gameState.bananaNotificationTimer) * 2 : 1.0;
-                
-                // 提示背景
+            // 绘制关卡提示（每关开始前显示约2.5秒）
+            if (gameState.running && !gameState.levelNotificationShown && gameState.levelNotificationTimer < 2.5) {
+                const levelName = LEVEL_SETTINGS.levels[gameState.currentLevel].name;
+                const notifX = GAME_WIDTH / 2;
+                const notifY = GAME_HEIGHT / 2 - 150;
+                const alpha = gameState.levelNotificationTimer < 0.4 ? gameState.levelNotificationTimer * 2.5 :
+                             gameState.levelNotificationTimer > 2.1 ? (2.5 - gameState.levelNotificationTimer) * 2.5 : 1.0;
                 ctx.fillStyle = `rgba(0, 0, 0, ${0.8 * alpha})`;
-                ctx.fillRect(notificationX - 250, notificationY - 40, 500, 80);
+                ctx.fillRect(notifX - 200, notifY - 35, 400, 70);
                 ctx.strokeStyle = `rgba(241, 196, 15, ${alpha})`;
                 ctx.lineWidth = 4;
-                ctx.strokeRect(notificationX - 250, notificationY - 40, 500, 80);
-                
-                // 提示文字
+                ctx.strokeRect(notifX - 200, notifY - 35, 400, 70);
                 ctx.fillStyle = `rgba(241, 196, 15, ${alpha})`;
-                ctx.font = 'bold 36px Arial';
+                ctx.font = 'bold 28px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText(`🎮 当前香蕉数: ${gameState.bananas}`, notificationX, notificationY + 10);
+                ctx.fillText(levelName, notifX, notifY + 10);
                 ctx.textAlign = 'left';
-                
-                // 3秒后标记为已显示
-                if (gameState.bananaNotificationTimer >= 3.0) {
-                    gameState.bananaNotificationShown = true;
+                if (gameState.levelNotificationTimer >= 2.5) {
+                    gameState.levelNotificationShown = true;
                 }
             }
-
+            
             // 绘制时间警告（如果猴子离开视野）
             if (gameState.running && !isMonkeyInView()) {
                 const remainingTime = TIME_SETTINGS.outOfViewTimeLimit - gameState.monkeyOutOfViewTime;
@@ -3131,6 +3200,27 @@
                     ctx.textAlign = 'left';
                 }
             }
+
+            // 绘制声音按钮（始终显示在左上角）
+            drawSoundButton();
+        }
+
+        // 绘制声音按钮（左上角）
+        function drawSoundButton() {
+            const btn = virtualButtonPositions.sound;
+            const pressed = virtualButtons.sound;
+            const isOn = gameState.musicOn;
+            drawVirtualButton(
+                btn,
+                pressed,
+                isOn ? 'rgba(241, 196, 15, 0.7)' : 'rgba(149, 165, 166, 0.5)',
+                isOn ? 'rgba(241, 196, 15, 0.95)' : 'rgba(149, 165, 166, 0.7)',
+                isOn ? '#f1c40f' : '#95a5a6',
+                isOn ? '🔊' : '🔇',
+                null,
+                false
+            );
+            ctx.textAlign = 'left';
         }
 
         // 圆角矩形辅助函数
@@ -3341,6 +3431,8 @@
             gameState.gameOver = false;
             gameState.levelBananasReceived = false;
             gameState.dynamicMonkeySpawnTimer = 0; // 重置动态猴子计时器
+            gameState.levelNotificationShown = false; // 新关卡开始时显示关卡名
+            gameState.levelNotificationTimer = 0;
             // 成功进入下一关，清除失败关卡记录
             gameState.failedLevel = null;
             
@@ -3503,9 +3595,9 @@
                 };
             }
             
-            // 重置香蕉提示
-            gameState.bananaNotificationTimer = 0;
-            gameState.bananaNotificationShown = false;
+            // 重置关卡提示（每关开始前显示）
+            gameState.levelNotificationTimer = 0;
+            gameState.levelNotificationShown = false;
             
             // 根据关卡设置初始位置
             const levelSettings = LEVEL_SETTINGS.levels[gameState.currentLevel];
@@ -3563,6 +3655,12 @@
             
             gameOverlay.classList.remove('show');
             
+            // 播放背景音乐（根据用户设置）
+            if (gameState.musicOn) {
+                bgMusic.currentTime = 0;
+                bgMusic.play().catch(e => console.log('音乐自动播放可能被浏览器阻止:', e));
+            }
+
             console.log(`游戏已开始，从${levelSettings.name}开始`);
         }
 
