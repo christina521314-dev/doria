@@ -1501,23 +1501,25 @@
             }
         }
 
-        // 检查玩家是否碰到普通猴子（与陷阱碰撞逻辑一致）
+        // 检查玩家是否碰到普通猴子（碰撞机制与陷阱一致，碰撞盒宽高使用陷阱参数）
         function checkNormalMonkeyCollision() {
             const playerBottom = player.y + player.height;
             const playerTop = player.y;
             const playerLeft = player.x;
             const playerRight = player.x + player.width;
 
-            const collisionBoxWidth = NORMAL_MONKEY_CONFIG.collisionBoxWidth != null
-                ? NORMAL_MONKEY_CONFIG.collisionBoxWidth
-                : NORMAL_MONKEY_CONFIG.width;
-            const collisionBoxOffset = (NORMAL_MONKEY_CONFIG.width - collisionBoxWidth) / 2;
+            const collisionBoxWidth = PLATFORM_CONFIG.collisionBoxWidth || PLATFORM_CONFIG.trapWidth;
+            const collisionBoxHeight = NORMAL_MONKEY_CONFIG.collisionBoxHeight != null
+                ? NORMAL_MONKEY_CONFIG.collisionBoxHeight
+                : PLATFORM_CONFIG.trapHeight;
+            const collisionBoxOffsetX = (monkey) => (monkey.width - collisionBoxWidth) / 2;
+            const collisionBoxOffsetY = (monkey) => monkey.height - collisionBoxHeight;
 
             for (let monkey of normalMonkeys) {
-                const monkeyTop = monkey.y;
+                const monkeyLeft = monkey.x + collisionBoxOffsetX(monkey);
+                const monkeyRight = monkeyLeft + collisionBoxWidth;
+                const monkeyTop = monkey.y + collisionBoxOffsetY(monkey);
                 const monkeyBottom = monkey.y + monkey.height;
-                const monkeyLeft = monkey.x + collisionBoxOffset;
-                const monkeyRight = monkey.x + collisionBoxOffset + collisionBoxWidth;
 
                 const horizontalOverlap = playerRight - 80 > monkeyLeft && playerLeft + 20 < monkeyRight;
                 const verticalOverlap = playerBottom >= monkeyTop && playerTop <= monkeyBottom;
